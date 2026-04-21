@@ -10,3 +10,8 @@ Make the snake move automatically using a Swing timer that ticks every 150 milli
 Prompt 4 : 
 Add a food pellet that spawns at a random empty cell. When the snake eats it, grow by one segment and spawn new food. Add collision detection: hitting a wall or the snake's own body should end the game, stop movement, and show a "Game Over" message with the final score. Display the current score in the top-left corner during play. When the game is over, let the player press R to reset everything and play again.
 
+Result: The AI drew a snake and grid correctly. Made the window, and everything went good. 
+
+Fixes: Nothing .
+
+Observation: The AI chose LinkedList for the snake body worth asking it to explain why. Also i noticed few new functions for me i had to search and learn more about . 
