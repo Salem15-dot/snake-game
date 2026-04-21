@@ -4,12 +4,14 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Random;
 
 public class SnakeGame {
     private static final int WINDOW_SIZE = 600;
@@ -31,29 +33,34 @@ public class SnakeGame {
         private static final Color BACKGROUND_COLOR = Color.DARK_GRAY;
         private static final Color GRID_LINE_COLOR = new Color(85, 85, 85);
         private static final Color SNAKE_COLOR = Color.GREEN;
+        private static final Color FOOD_COLOR = Color.RED;
+        private static final int TICK_MS = 150;
 
         private enum Direction {
             UP, DOWN, LEFT, RIGHT
         }
 
         private final Deque<Point> snake = new ArrayDeque<>();
+        private final Random random = new Random();
         private Direction currentDirection = Direction.RIGHT;
         private Direction pendingDirection = Direction.RIGHT;
         private final Timer gameTimer;
+        private Point food;
+        private int score;
+        private boolean gameOver;
 
         GamePanel() {
             setPreferredSize(new Dimension(WINDOW_SIZE, WINDOW_SIZE));
             setFocusable(true);
 
-            int centerX = GRID_COUNT / 2;
-            int centerY = GRID_COUNT / 2;
-            snake.addLast(new Point(centerX - 2, centerY));
-            snake.addLast(new Point(centerX - 1, centerY));
-            snake.addLast(new Point(centerX, centerY));
-
             addKeyListener(new KeyAdapter() {
                 @Override
                 public void keyPressed(KeyEvent e) {
+                    if (e.getKeyCode() == KeyEvent.VK_R && gameOver) {
+                        resetGame();
+                        return;
+                    }
+
                     Direction requestedDirection = switch (e.getKeyCode()) {
                         case KeyEvent.VK_UP -> Direction.UP;
                         case KeyEvent.VK_DOWN -> Direction.DOWN;
@@ -62,14 +69,14 @@ public class SnakeGame {
                         default -> null;
                     };
 
-                    if (requestedDirection != null && !isOpposite(requestedDirection, currentDirection)) {
+                    if (!gameOver && requestedDirection != null && !isOpposite(requestedDirection, pendingDirection)) {
                         pendingDirection = requestedDirection;
                     }
                 }
             });
 
-            gameTimer = new Timer(150, this::onTimerTick);
-            gameTimer.start();
+            gameTimer = new Timer(TICK_MS, this::onTimerTick);
+            resetGame();
         }
 
         @Override
@@ -90,6 +97,23 @@ public class SnakeGame {
             for (Point segment : snake) {
                 g.fillRect(segment.x * CELL_SIZE, segment.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
             }
+
+            if (food != null) {
+                g.setColor(FOOD_COLOR);
+                g.fillRect(food.x * CELL_SIZE, food.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+            }
+
+            g.setColor(Color.WHITE);
+            g.setFont(new Font("SansSerif", Font.BOLD, 18));
+            g.drawString("Score: " + score, 12, 24);
+
+            if (gameOver) {
+                g.setFont(new Font("SansSerif", Font.BOLD, 34));
+                g.drawString("Game Over", WINDOW_SIZE / 2 - 105, WINDOW_SIZE / 2 - 10);
+                g.setFont(new Font("SansSerif", Font.BOLD, 20));
+                g.drawString("Final Score: " + score, WINDOW_SIZE / 2 - 75, WINDOW_SIZE / 2 + 22);
+                g.drawString("Press R to Restart", WINDOW_SIZE / 2 - 88, WINDOW_SIZE / 2 + 52);
+            }
         }
 
         @Override
@@ -99,6 +123,10 @@ public class SnakeGame {
         }
 
         private void onTimerTick(ActionEvent ignored) {
+            if (gameOver) {
+                return;
+            }
+
             currentDirection = pendingDirection;
 
             Point head = snake.peekLast();
@@ -112,21 +140,77 @@ public class SnakeGame {
                 case RIGHT -> nextX++;
             }
 
-            if (nextX < 0) {
-                nextX = GRID_COUNT - 1;
-            } else if (nextX >= GRID_COUNT) {
-                nextX = 0;
+            if (nextX < 0 || nextX >= GRID_COUNT || nextY < 0 || nextY >= GRID_COUNT) {
+                gameOver = true;
+                gameTimer.stop();
+                repaint();
+                return;
             }
 
-            if (nextY < 0) {
-                nextY = GRID_COUNT - 1;
-            } else if (nextY >= GRID_COUNT) {
-                nextY = 0;
+            boolean ateFood = food != null && food.x == nextX && food.y == nextY;
+            Point tail = snake.peekFirst();
+            if (collidesWithSnake(nextX, nextY, ateFood ? null : tail)) {
+                gameOver = true;
+                gameTimer.stop();
+                repaint();
+                return;
             }
 
             snake.addLast(new Point(nextX, nextY));
-            snake.removeFirst();
+            if (ateFood) {
+                score++;
+                spawnFood();
+            } else {
+                snake.removeFirst();
+            }
             repaint();
+        }
+
+        private void resetGame() {
+            snake.clear();
+
+            int centerX = GRID_COUNT / 2;
+            int centerY = GRID_COUNT / 2;
+            snake.addLast(new Point(centerX - 2, centerY));
+            snake.addLast(new Point(centerX - 1, centerY));
+            snake.addLast(new Point(centerX, centerY));
+
+            currentDirection = Direction.RIGHT;
+            pendingDirection = Direction.RIGHT;
+            score = 0;
+            gameOver = false;
+            spawnFood();
+            gameTimer.start();
+            requestFocusInWindow();
+            repaint();
+        }
+
+        private void spawnFood() {
+            if (snake.size() >= GRID_COUNT * GRID_COUNT) {
+                food = null;
+                return;
+            }
+
+            int x;
+            int y;
+            do {
+                x = random.nextInt(GRID_COUNT);
+                y = random.nextInt(GRID_COUNT);
+            } while (collidesWithSnake(x, y, null));
+
+            food = new Point(x, y);
+        }
+
+        private boolean collidesWithSnake(int x, int y, Point ignoredSegment) {
+            for (Point segment : snake) {
+                if (ignoredSegment != null && segment == ignoredSegment) {
+                    continue;
+                }
+                if (segment.x == x && segment.y == y) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private boolean isOpposite(Direction first, Direction second) {
